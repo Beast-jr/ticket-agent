@@ -5,3 +5,4 @@ __pycache__/
 data/raw/*.csv
 .ipynb_checkpoints/
 data/processed/knowledge_base.csv
+logs/
