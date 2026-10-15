@@ -95,3 +95,59 @@ Why merge:
 - Use the 8-category list above (or 7 without HR).
 - Strip or handle placeholders before using answers.
 - Consider filtering out bodies under ~10 words and answers under ~10 words when building the answer-search database.
+
+---
+
+# Day 2 - Cleaning, split and search
+
+## Final row counts
+
+| Step | Rows |
+|---|---|
+| English rows | 16,338 |
+| After dropping bodies or answers with 5 words or fewer | 16,045 |
+| After dropping duplicates (none found) | 16,045 |
+| **Knowledge base** (goes into the database) | **15,945** |
+| **Eval set** (never goes into the database) | **100** |
+
+The eval set was picked at random with seed 42, spread across categories in proportion to their size (for example 41 Technical & IT tickets, 2 Human Resources). Both files are in `data/processed/`. `embed_load.py` stops if any eval ticket is found in the database.
+
+Rows with an empty subject were kept. For them, `text` is just the body.
+
+## Category mapping
+
+| Original queue | Final category |
+|---|---|
+| Technical Support, IT Support | Technical & IT Support |
+| Product Support | Product Support |
+| Customer Service, General Inquiry | Customer Service |
+| Billing and Payments | Billing and Payments |
+| Returns and Exchanges | Returns and Exchanges |
+| Service Outages and Maintenance | Service Outages and Maintenance |
+| Sales and Pre-Sales | Sales and Pre-Sales |
+| Human Resources | Human Resources |
+
+Knowledge base counts: Technical & IT 6,528, Product 2,983, Customer Service 2,595, Billing 1,551, Returns 809, Outages 646, Sales 496, HR 337. The original `queue` is still kept in its own column.
+
+## Placeholder handling
+
+Applied to answers and to ticket text (subject + body). After cleaning, no `<...>` tags are left.
+
+| Placeholder | Seen | Replaced with |
+|---|---|---|
+| `<tel_num>` | 6,321 | "our support line" |
+| `<name>` | 3,625 | "there" ("Dear <name>" becomes "Dear customer", and a tag at the start of an answer becomes "Hello") |
+| `<acc_num>` | 1,484 | "your account" |
+| `<br>` | 1,285 | a space |
+| `<email>` | 18 | "our support email" |
+| `<amount>` | 6 | "the amount" |
+| `<website_url>`, `<link>` | 6 and 3 | "our website" |
+| rare ones: `<company_name>`, `<case_num>`, `<sn>`, `<time>`, `<url>`, `<contact_info>`, `<company>`, `<organization>` (1-3 each) | 13 total | "[redacted]" |
+
+Odd spellings such as `<Name>` or `<Tel_Num>` are treated like their lowercase versions. Any tag not listed above falls back to "[redacted]".
+
+## Database and search
+
+- Table `tickets` with a 384-number embedding per ticket (model `all-MiniLM-L6-v2`).
+- Index type: HNSW (cosine). It works on an empty table and updates itself when new rows are added, which matters because the agent will add "learned" tickets later. The other option, IVFFlat, must be built after the data is loaded.
+- Loading 15,945 tickets took about 4.5 minutes on this machine. Running the loader again adds nothing.
