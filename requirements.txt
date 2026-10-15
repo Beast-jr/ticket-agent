@@ -12,3 +12,4 @@ fastapi
 uvicorn
 streamlit
 pytest
+langgraph-checkpoint-postgres

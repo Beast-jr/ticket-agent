@@ -19,13 +19,18 @@ graph TD;
 	reconcile_category(reconcile_category)
 	rewrite_query(rewrite_query)
 	escalate(escalate)
+	learn(learn)
+	human_review(human_review)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> classify;
-	check -. &nbsp;done&nbsp; .-> __end__;
 	check -.-> escalate;
+	check -. &nbsp;done&nbsp; .-> learn;
 	check -.-> redraft;
 	classify --> retrieve;
 	draft --> check;
+	escalate --> human_review;
+	human_review -. &nbsp;end&nbsp; .-> __end__;
+	human_review -.-> learn;
 	reconcile_category -.-> draft;
 	reconcile_category -.-> escalate;
 	reconcile_category -.-> rewrite_query;
@@ -36,7 +41,7 @@ graph TD;
 	score_confidence -.-> escalate;
 	score_confidence -.-> reconcile_category;
 	score_confidence -.-> rewrite_query;
-	escalate --> __end__;
+	learn --> __end__;
 	reconcile_category -.-> reconcile_category;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0

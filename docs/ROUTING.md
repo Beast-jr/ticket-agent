@@ -193,3 +193,51 @@ When a ticket is escalated after a failed check, `draft_reply` is cleared so a r
 Live self-check test pending quota: run a ticket with no good match and confirm it ends escalated, not answered.
 
 Also still to check live: how often the real LLM check says `not_supported` on good replies (false alarms), and how often it lets a bad reply through. The mocked tests prove the wiring, not the quality of the LLM's judgement.
+
+---
+
+# Day 8: human review and learning
+
+Escalating used to mean "stop and write a summary". Now it means "pause, wait for a person, and then continue".
+
+## How it works
+
+1. **Every run is saved.** With a checkpointer (LangGraph's Postgres one, in the same Docker database), each run is saved under `thread_id = ticket id` after every node. Closing the program loses nothing.
+2. **Escalation pauses.** `escalate` builds the summary as before. The next node, `human_review`, calls `interrupt()` and the run stops there, waiting.
+3. **A human decides** (`scripts/review_queue.py`, or `resume_ticket()` in code):
+
+| Decision | Needs | Result |
+|---|---|---|
+| approve | a reply (the human writes it, or accepts the rejected draft in the CLI) | status `replied_by_human` |
+| edit | the corrected reply | status `replied_by_human` |
+| reject | nothing (optional note) | status `closed`, no reply |
+
+   Every decision must say who made it (`decided_by`). The state stores the action, who, when (UTC) and the note in `human_decision`. A decision that is incomplete, unsigned or has an unknown action is refused **before** anything is resumed, and the ticket keeps waiting.
+4. **Learning.** After a reply was *sent* (the self-check passed, status `replied`, or a human replied, status `replied_by_human`), the `learn` node embeds the ticket text and final reply and inserts them in the knowledge base as `L-<ticket id>` with `source = 'learned'`. Search results now include `source`, so learned tickets can be told apart from the original data. Rejected and closed tickets are never learned, and neither are tickets whose draft was rejected and not replaced.
+
+## Rules that protect the data
+
+- **Learning is off by default.** `run_ticket(..., learn=True)` switches it on for that run. Tests, calibration and evaluation runs therefore cannot change the knowledge base.
+- **Eval-set tickets are never learned**, even with `learn=True`. This keeps the Day 2 rule that eval tickets never enter the database.
+- **Citation tags (`[T01234]`) are stripped** from a reply before it is learned. They point at tickets that mean nothing outside that one run.
+- **Learning is idempotent.** Running it twice (for example after a restart) adds the row once.
+- **Without a checkpointer** (scripts, evaluation) `escalate` goes straight to the end, as before. A run can only pause if its state is being saved.
+
+## Why `human_review` is a separate node from `escalate`
+
+When a paused run continues, LangGraph runs the paused node again from its first line. If the pause were inside `escalate`, resuming would repeat the LLM call that writes the summary. In its own node, the repeated part is just the pause itself. (Test (b) checks this: after a restart and a resume, the LLM was called exactly once in total, for classify.)
+
+## Limits and risks
+
+- **Learning from the agent's own replies can feed on itself.** A `replied` ticket learned today can be retrieved tomorrow as a "past ticket" for a similar one. The self-check keeps the quality bar up, but a reply that slipped through would be copied. Human replies are the safer thing to learn from. If this becomes a problem, learn only from `replied_by_human`, or add a delay and a spot-check.
+- **Near-duplicates pile up.** Nothing stops many learned copies of the same kind of ticket. The synthetic dataset already has this problem.
+- **The learned ticket keeps the agent's category.** If the category was wrong, the learned row is labelled wrong too.
+- **Nobody is notified.** `review_queue.py list` is a pull model: someone has to run it. A real system needs an alert or a web page (the Streamlit day).
+
+## Tests
+
+`tests/test_hitl.py` uses a mocked LLM and a mocked embedding, but a real Postgres. It runs against a **separate database called `tickets_test`** that it creates itself, and it refuses to run if `DATABASE_URL` does not point there, so the real knowledge base cannot be touched. It covers: (a) an escalated ticket pauses and is saved; (b) a restart (new graph, new connection) and a resume work, with no repeated LLM calls; (c) approve replies and learns; edit is recorded as `edit`; (d) reject closes and learns nothing; (e) after learning, a near-identical new ticket finds the learned one first (`source = 'learned'`). Extra tests cover learning from a self-checked reply, learning being off by default, the eval guard, refusing bad decisions, and refusing a second decision on a finished ticket.
+
+## TODO: live check pending quota
+
+Everything today used mocked LLM calls. Still to do once Groq quota allows: run a few real tickets with `learn=True` and a checkpointer against the real database, review them with `review_queue.py`, and check that learned rows look sensible. After that, remove any test learned rows from the real `tickets` table (`DELETE FROM tickets WHERE source = 'learned'`), unless they are meant to stay.

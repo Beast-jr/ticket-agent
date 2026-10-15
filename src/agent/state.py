@@ -30,6 +30,12 @@ class TicketState(TypedDict, total=False):
     redrafts: int                  # how many times the reply was rewritten after a failed check (max 1)
     status: str                    # new / classified / drafted / replied / escalated
     escalation_summary: str        # hand-over note for a human (set by escalate)
+    rejected_reply: str            # the last reply the self-check rejected (kept for the human reviewer)
+    human_decision: dict           # who decided, what, and when (action, decided_by, decided_at, note)
+    final_reply: str               # the reply a human wrote or edited
+    learn_enabled: bool            # True only for runs that may add to the knowledge base
+    learned: bool                  # True once this ticket was added to the knowledge base
+    learned_ticket_id: str         # id of the learned copy, like L-T12345
     reconciled: bool               # True once reconcile_category has run (it only runs once)
     confidence_history: list[float]  # confidence after each scoring, oldest first
     steps_log: list[str]           # plain-English diary of what happened

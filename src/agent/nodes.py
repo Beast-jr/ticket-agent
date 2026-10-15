@@ -1,8 +1,12 @@
 ﻿"""The steps (nodes) of the agent. A node takes the state and returns what it wants to change."""
 import json
 import re
+from datetime import datetime, timezone
+
+from langgraph.types import interrupt
 
 from agent.state import TicketState
+from knowledge import add_learned_ticket, is_eval_ticket, strip_citations
 from llm import call_llm
 from prepare_data import PLACEHOLDER_PATTERN, QUEUE_TO_CATEGORY, clean_placeholders
 from search import search_similar
@@ -558,4 +562,91 @@ def escalate(state: TicketState) -> dict:
     log.append("escalate: ticket handed to a human with a summary "
                f"({'template' if state['top_score'] < OFF_TOPIC_TOP1 else 'LLM'} paragraph)")
     # draft_reply is cleared so a rejected reply can never be shown to the customer by mistake
-    return {"status": "escalated", "escalation_summary": summary, "draft_reply": "", "steps_log": log}
+    return {"status": "escalated", "escalation_summary": summary, "draft_reply": "",
+            "rejected_reply": rejected, "steps_log": log}
+
+
+# --- human review (Day 8) ---------------------------------------------------
+
+DECISION_ACTIONS = ("approve", "edit", "reject")
+
+
+def validate_decision(decision) -> dict:
+    """Check a human decision and return it cleaned up. Raises ValueError with a clear message.
+
+    {"action": "approve" | "edit" | "reject", "reply": "...", "decided_by": "name", "note": "..."}
+    approve and edit need a reply (approve: the human wrote or accepted it; edit: the corrected draft).
+    reject needs no reply."""
+    if not isinstance(decision, dict):
+        raise ValueError("decision must be a dict like {'action': 'approve', 'reply': '...', 'decided_by': 'name'}")
+    action = str(decision.get("action", "")).strip().lower()
+    if action not in DECISION_ACTIONS:
+        raise ValueError(f"action must be one of {DECISION_ACTIONS}, got {decision.get('action')!r}")
+    reply = str(decision.get("reply") or "").strip()
+    if action in ("approve", "edit") and not reply:
+        raise ValueError(f"'{action}' needs a non-empty reply")
+    decided_by = str(decision.get("decided_by") or "").strip()
+    if not decided_by:
+        raise ValueError("decided_by is required (who made this decision)")
+    return {"action": action, "reply": reply, "decided_by": decided_by,
+            "note": str(decision.get("note") or "").strip()}
+
+
+def human_review(state: TicketState) -> dict:
+    """Pause the run and wait for a human decision. Resume with Command(resume=decision).
+
+    This is its own node (not part of escalate) on purpose: when a paused run continues, LangGraph
+    runs the paused node again from its first line. Here that is harmless; inside escalate it would
+    repeat the LLM call that writes the summary."""
+    decision = interrupt({
+        "ticket_id": state.get("ticket_id"),
+        "escalation_summary": state.get("escalation_summary", ""),
+        "rejected_reply": state.get("rejected_reply", ""),
+        "choices": list(DECISION_ACTIONS),
+    })
+    d = validate_decision(decision)
+    record = {"action": d["action"], "decided_by": d["decided_by"], "note": d["note"],
+              "decided_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    log = list(state.get("steps_log", []))
+    if d["action"] == "reject":
+        log.append(f"human_review: {d['decided_by']} rejected the ticket, closed with no reply")
+        return {"human_decision": record, "status": "closed", "steps_log": log}
+    log.append(f"human_review: {d['decided_by']} chose {d['action']}, reply sent by a human")
+    return {"human_decision": record, "final_reply": d["reply"], "status": "replied_by_human",
+            "steps_log": log}
+
+
+def after_human(state: TicketState) -> str:
+    """Conditional edge after human review: learn from an approved reply, otherwise stop."""
+    return "learn" if state.get("status") == "replied_by_human" else "end"
+
+
+# --- learn ------------------------------------------------------------------
+
+def learn(state: TicketState) -> dict:
+    """Add a good ticket + its final reply to the knowledge base (source = 'learned').
+
+    Learns only from replies that were sent: a self-check-supported reply ("replied") or a human
+    reply ("replied_by_human"). Rejected or closed tickets are never learned.
+    Off unless the run was started with learn=True, so test and evaluation runs cannot change the data."""
+    if not state.get("learn_enabled"):
+        return {}
+    log = list(state.get("steps_log", []))
+    status = state.get("status")
+    if status not in ("replied", "replied_by_human"):
+        log.append(f"learn: skipped (status is {status!r}, only sent replies are learned)")
+        return {"steps_log": log}
+    ticket_id = state.get("ticket_id") or ""
+    if not ticket_id:
+        log.append("learn: skipped (the ticket has no id)")
+        return {"steps_log": log}
+    if is_eval_ticket(ticket_id):
+        log.append("learn: skipped (this is an eval-set ticket, which must never enter the database)")
+        return {"steps_log": log}
+
+    reply = strip_citations(state.get("final_reply") or state.get("draft_reply", ""))
+    added = add_learned_ticket(ticket_id, state["text"], reply, state.get("category", "Unknown"),
+                               state.get("priority"))
+    log.append(f"learn: {'added' if added else 'already had'} L-{ticket_id} in the knowledge base "
+               "(source 'learned')")
+    return {"learned": True, "learned_ticket_id": f"L-{ticket_id}", "steps_log": log}

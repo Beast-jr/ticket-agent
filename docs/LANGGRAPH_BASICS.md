@@ -405,6 +405,70 @@ The redraft prompt now contains the rejected reply and the reason above.
 `after_check` returns `"done"`, and the graph ends. LLM calls: classify, draft, check, redraft, check = 5. Path: `classify -> retrieve -> score_confidence -> draft -> check -> redraft -> check`.
 
 If the second check had also said `not_supported`, `after_check` would return `"escalate"` (because `redrafts` is already 1), and the human would receive the reason in `escalation_summary`.
+## Day 8: pausing for a human (checkpointer, interrupt, resume)
+
+Three new ideas, and one analogy to hold them together: **a bookmark in a book.**
+
+| Idea | Everyday meaning | In this project |
+|---|---|---|
+| **Checkpointer** | After every page you put in a bookmark that records exactly where you are *and* everything you remember so far | `PostgresSaver` writes the whole state to Postgres after every node |
+| **thread_id** | The name on the bookmark, so you can find your own book among many | `thread_id = ticket id`, so every ticket has its own saved run |
+| **interrupt()** | You stop reading mid-book and wait for someone to answer a question | `human_review` calls `interrupt(...)`: the run stops and `invoke` returns |
+| **Command(resume=...)** | The answer comes back, and you carry on from the bookmark | `resume_ticket()` passes the human's decision and the run continues |
+
+Because the bookmark is in the database (not in memory), the book can be closed (program stopped) and opened again tomorrow (new program, new graph object) and it carries on from the same page.
+
+A subtle rule: when a paused run continues, LangGraph **runs the paused node again from its first line** (the answer is handed to the `interrupt()` call). That is why `human_review` is a node of its own: the only thing repeated is the pause. Inside `escalate` it would have repeated the LLM call.
+
+New part of the graph:
+
+```
+escalate -> human_review (PAUSE) -> [after_human] -+- approve / edit -> learn -> END
+                                                   +- reject --------------> END
+check (supported) ------------------------------------> learn -> END
+```
+
+### Dry run of test (b): a restart in the middle of a pause
+
+Mocked LLM, real local Postgres (a test database). The ticket is the made-up test ticket "Concerns about hospital security systems..." with search results that do not match it (similarity 0.20), so the router escalates it. Fields that did not change are left out.
+
+**Start** (`run_ticket(..., checkpointer=saver, learn=True)`): `ticket_id = "TEST-B"`, every other field reset to empty, `learn_enabled = True`, `status = "new"`.
+
+**1. After classify, retrieve, score_confidence** (same as before): `category = "Technical & IT Support"`, `priority = "high"`, `top_score = 0.2`, `agreement = 0.0`, `confidence = 0.16`, `status = "classified"`. The router sees 0.16, below 0.45, and returns `"escalate"`.
+
+**2. After escalate** (this state is **saved to Postgres**):
+
+| Field | Value |
+|---|---|
+| `status` | `classified` -> `escalated` |
+| `escalation_summary` | "PROBLEM: This ticket does not resemble anything in the support history (best past match scores only 0.20)... WHY ESCALATED: confidence 0.16 is below the escalation limit of 0.45... WHAT WAS TRIED: ... CLOSEST PAST TICKETS: ..." (a fixed template, no LLM call) |
+| `rejected_reply` | `""` (there was no draft) |
+| `steps_log` | + `escalate: ticket handed to a human with a summary (template paragraph)` |
+
+**3. The pause.** `human_review` calls `interrupt()`. `invoke` returns with an `__interrupt__` entry, the saved snapshot says `next = ("human_review",)`, and `list_paused()` shows `TEST-B`.
+
+**4. The restart.** The database connection is closed. The program "starts again": a new connection and a new graph object. Nothing is kept in memory. `is_waiting_for_human("TEST-B")` is still true, because the state was read back from Postgres.
+
+**5. After human_review** (`resume_ticket("TEST-B", {"action": "approve", "reply": "...", "decided_by": "Dana"}, saver)`):
+
+| Field | Value |
+|---|---|
+| `human_decision` | `{"action": "approve", "decided_by": "Dana", "note": "", "decided_at": "2026-10-15T23:00:06+00:00"}` |
+| `final_reply` | "Thank you for reporting this. Please send us the access logs and we will investigate." |
+| `status` | `escalated` -> `replied_by_human` |
+| `steps_log` | + `human_review: Dana chose approve, reply sent by a human` |
+
+`after_human` sees the status `replied_by_human` and returns `"learn"`.
+
+**6. After learn**
+
+| Field | Value |
+|---|---|
+| `learned` | `False` -> `True` |
+| `learned_ticket_id` | `"L-TEST-B"` |
+| `steps_log` | + `learn: added L-TEST-B in the knowledge base (source 'learned')` |
+
+The ticket and the human's reply are now a row in the `tickets` table with `source = 'learned'`, and the graph ends. LLM calls in the whole run, across the restart: **1** (classify). The escalation summary was not written again after the resume.
 ## How this will grow
 
 Each new day adds nodes or edges. The chart gets longer, and the graph gets forks and loops.
@@ -416,6 +480,7 @@ Day 4   START -> classify -> retrieve -> draft -> END   (done)
 
 Day 5-6 router, reconcile/rewrite loops, real escalate   (done, see above)
 Day 7   check + one redraft before anything is sent   (done, see above)
+Day 8   saved runs, pause for a human, learn from approved replies   (done, see above)
         retrieve: search the past tickets (src/search.py) and fill similar_tickets
         draft:    write a reply using those tickets as examples
 
