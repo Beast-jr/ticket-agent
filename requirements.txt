@@ -1,0 +1,14 @@
+﻿pandas
+jupyter
+ipykernel
+python-dotenv
+langgraph
+langchain-core
+groq
+sentence-transformers
+psycopg[binary]
+pgvector
+fastapi
+uvicorn
+streamlit
+pytest
