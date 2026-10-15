@@ -17,6 +17,7 @@ class TicketState(TypedDict, total=False):
     classify_reason: str           # one-line explanation from the LLM
     similar_tickets: list[dict]    # past tickets found by search (Day 4+)
     draft_reply: str               # the reply the agent writes (Day 4+)
+    used_ticket_ids: list[str]     # which similar tickets the reply was based on
     analysis: Analysis             # summary, root cause, suggested fix, severity
     confidence: float              # how sure the agent is (0-1)
     attempts: int                  # how many times we tried to draft a reply

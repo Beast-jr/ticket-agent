@@ -1,15 +1,19 @@
-"""Wire the nodes together into a LangGraph. Day 3: START -> classify -> END."""
+"""Wire the nodes together into a LangGraph. Day 4: START -> classify -> retrieve -> draft -> END."""
 from langgraph.graph import END, START, StateGraph
 
-from agent.nodes import classify
+from agent.nodes import classify, draft, retrieve
 from agent.state import TicketState
 
 
 def build_graph():
     graph = StateGraph(TicketState)
     graph.add_node("classify", classify)
+    graph.add_node("retrieve", retrieve)
+    graph.add_node("draft", draft)
     graph.add_edge(START, "classify")
-    graph.add_edge("classify", END)
+    graph.add_edge("classify", "retrieve")
+    graph.add_edge("retrieve", "draft")
+    graph.add_edge("draft", END)
     return graph.compile()
 
 

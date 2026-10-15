@@ -1,4 +1,4 @@
-"""Day 2: clean the raw ticket CSV and split it into a knowledge base and an eval set.
+﻿"""Day 2: clean the raw ticket CSV and split it into a knowledge base and an eval set.
 
 Run from the project root:  python src/prepare_data.py
 """
@@ -61,7 +61,7 @@ def clean_placeholders(text: str) -> str:
     text = re.sub(r"\b(Dear|Hello|Hi|Hey)\s+<name>", r"\1 there", text, flags=re.IGNORECASE)
     text = re.sub(r"\bDear there\b", "Dear customer", text)
     # A tag at the start of a line ("<name>, thank you...") becomes a greeting
-    text = re.sub(r"(^|\n)\s*<name>\s*([,:]?)", r"\1Hello\2", text, flags=re.IGNORECASE)
+    text = re.sub(r"(^|\n)[ \t]*<name>(?=[\s,:])", r"\1Hello", text, flags=re.IGNORECASE)
 
     def swap(match):
         return PLACEHOLDER_REPLACEMENTS.get(match.group(0).lower(), FALLBACK_REPLACEMENT)

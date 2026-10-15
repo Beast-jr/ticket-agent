@@ -151,3 +151,9 @@ Odd spellings such as `<Name>` or `<Tel_Num>` are treated like their lowercase v
 - Table `tickets` with a 384-number embedding per ticket (model `all-MiniLM-L6-v2`).
 - Index type: HNSW (cosine). It works on an empty table and updates itself when new rows are added, which matters because the agent will add "learned" tickets later. The other option, IVFFlat, must be built after the data is loaded.
 - Loading 15,945 tickets took about 4.5 minutes on this machine. Running the loader again adds nothing.
+
+## Day 4 fix: "Hellothanks" bug
+
+On Day 4 the agent produced replies starting with "Hellothanks you for...". The cause was my Day 2 placeholder cleaning: the rule that turns a leading `<name>` into "Hello" also swallowed the space after it. About 1,070 knowledge-base answers and 6 eval answers were affected. The rule is fixed, `prepare_data.py` was re-run (same ticket ids, same eval set, same ticket texts), and the database answers were refreshed (`embed_load.py` now refreshes answers of rows already loaded). Check: zero glued "Hello..." answers remain.
+
+One leftover quirk of the dataset: some answers were written as if the name tag were the speaker ("<name> is writing to acknowledge..."), which now reads "Hello is writing to acknowledge...". It is a small data problem and I left it alone.

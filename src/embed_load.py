@@ -38,6 +38,14 @@ def main():
         if in_db & eval_ids:
             raise SystemExit("Eval tickets are in the database - clean it before continuing.")
 
+        # Rows already loaded: refresh their answer text if the cleaned CSV changed
+        existing = kb[kb["ticket_id"].isin(in_db)]
+        with conn.cursor() as cur:
+            cur.executemany(
+                "UPDATE tickets SET answer = %s WHERE ticket_id = %s AND answer IS DISTINCT FROM %s",
+                [(a, i, a) for i, a in zip(existing["ticket_id"], existing["answer"])],
+            )
+
         todo = kb[~kb["ticket_id"].isin(in_db)]
         print(f"Knowledge base: {len(kb)} rows, already in database: {len(kb) - len(todo)}, to load: {len(todo)}")
 
