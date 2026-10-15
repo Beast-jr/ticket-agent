@@ -304,6 +304,107 @@ The dataset's own label is Product Support, priority medium. Path taken: `classi
 This ticket cost 3 LLM calls (classify, reconcile, draft) instead of the usual 2.
 
 An honest note: reconcile moved the category to match how the *neighbours* are filed. That is also why the confidence rose, so part of the improvement is by construction. It is a reasonable choice here because the reply is built from those neighbours' answers, but it means "reconciled" tickets are less certain than "drafted directly" ones.
+## Day 7: check and redraft (the agent reviews its own work)
+
+After `draft`, the graph now goes to **check**, and from there it can go forward, loop back for one rewrite, or stop at a human.
+
+**Analogy: a proofreader.** The writer hands in a letter with footnotes saying where each fact came from. The proofreader first does a quick mechanical check (do the footnotes point at real documents? are there any footnotes at all?). Only if that passes do they read the letter against the cited documents. If something is not backed up, the letter goes back to the writer *once*, with a note saying what is wrong. If it is still wrong, a human takes over.
+
+```
+draft -> check -> [after_check] -+-- supported ---------------------------> END (status "replied")
+           ^                      +-- not supported, first time -> redraft -+
+           |                      |                                          |
+           +----------------------+------------------------------------------+
+                                  +-- not supported again -------> escalate -> END
+```
+
+- `check` is a normal node. It writes `check_result`, `check_reason` and `check_attempts` into the state.
+- `after_check` is a conditional edge (a function, not a node), like `router`. It returns `"done"`, `"redraft"` or `"escalate"`.
+- `redraft` is the draft step again, with the reason for the rejection added to the prompt. It adds 1 to `redrafts`. The edge `redraft -> check` sends the new reply back for review.
+- The loop cannot run forever, because `after_check` only returns `"redraft"` while `redrafts` is 0.
+
+### Dry run of case (c): rejected once, fixed by the redraft
+
+This run uses the **mocked** LLM from `tests/test_check.py` (no real Groq call), so the ticket, the five past tickets (T00001 to T00005, similarity 0.94 and below) and the replies are made-up test data. It shows exactly how the state moves.
+
+> Concerns about hospital security systems. Suspected data breach, examining access logs.
+
+Tables show only the fields that changed at each node. After `check` fails, `after_check` sends the ticket to `redraft`; after the second `check` passes, it returns `"done"`.
+
+**Start** (`run_ticket`): `ticket_id = "T3"`, `text`, `attempts = 0`, `reconciled = False`, `redrafts = 0`, `check_attempts = 0`, `confidence_history = []`, `status = "new"`, `steps_log = []`.
+
+**1. After classify**
+
+| Field | Value |
+|---|---|
+| `category` / `priority` | Technical & IT Support / high |
+| `classify_reason` | "breach" |
+| `status` | `new` -> `classified` |
+
+**2. After retrieve**
+
+| Field | Value |
+|---|---|
+| `similar_tickets` | 5 past tickets, top score 0.94 |
+| `search_query` | the ticket text |
+
+**3. After score_confidence**
+
+| Field | Value |
+|---|---|
+| `top_score` / `agreement` | 0.94 / 1.0 |
+| `confidence` | 0.8 x 0.94 + 0.2 x 1.0 = **0.952** |
+
+The router returns `"draft"` (0.952 is at least 0.75).
+
+**4. After draft**
+
+| Field | Value |
+|---|---|
+| `draft_reply` | "We will fix it within 24 hours [T00001]. Please send the access logs [T00002]." |
+| `used_ticket_ids` | `["T00001", "T00002"]` (the cited ids) |
+| `analysis` | filled in (severity high) |
+| `attempts` | 0 -> 1 |
+| `status` | `classified` -> `drafted` |
+
+**5. After check (first time)**
+
+The rule check passes: there is a reply, it cites 2 tickets, and both are in the search results. So the LLM check runs and rejects the reply, because the 24 hour promise is not in the cited tickets.
+
+| Field | Value |
+|---|---|
+| `check_result` | `"not_supported"` |
+| `check_reason` | "the reply promises a 24 hour fix that the past tickets never mention" |
+| `check_attempts` | 0 -> 1 |
+| `status` | `drafted` -> `check_failed` |
+
+`after_check`: not supported and `redrafts` is 0, so it returns `"redraft"`.
+
+**6. After redraft**
+
+The redraft prompt now contains the rejected reply and the reason above.
+
+| Field | Value |
+|---|---|
+| `draft_reply` | "Please send the access logs so we can investigate [T00001] [T00002]." |
+| `attempts` | 1 -> 2 |
+| `redrafts` | 0 -> **1** |
+| `status` | `check_failed` -> `drafted` |
+
+`check_result` still says `not_supported` here. It is only updated by the next check.
+
+**7. After check (second time)**
+
+| Field | Value |
+|---|---|
+| `check_result` | `"supported"` |
+| `check_reason` | "every claim matches the cited tickets" |
+| `check_attempts` | 1 -> 2 |
+| `status` | `drafted` -> **`replied`** |
+
+`after_check` returns `"done"`, and the graph ends. LLM calls: classify, draft, check, redraft, check = 5. Path: `classify -> retrieve -> score_confidence -> draft -> check -> redraft -> check`.
+
+If the second check had also said `not_supported`, `after_check` would return `"escalate"` (because `redrafts` is already 1), and the human would receive the reason in `escalation_summary`.
 ## How this will grow
 
 Each new day adds nodes or edges. The chart gets longer, and the graph gets forks and loops.
@@ -314,6 +415,7 @@ Day 3   START -> classify -> END
 Day 4   START -> classify -> retrieve -> draft -> END   (done)
 
 Day 5-6 router, reconcile/rewrite loops, real escalate   (done, see above)
+Day 7   check + one redraft before anything is sent   (done, see above)
         retrieve: search the past tickets (src/search.py) and fill similar_tickets
         draft:    write a reply using those tickets as examples
 

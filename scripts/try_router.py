@@ -15,8 +15,8 @@ import pandas as pd
 from agent.graph import run_ticket
 from off_topic import OFF_TOPIC
 
-STATUS_TO_ROUTE = {"drafted": "draft", "draft_failed": "draft", "needs_rewrite": "rewrite_query",
-                   "escalated": "escalate"}
+STATUS_TO_ROUTE = {"replied": "draft", "drafted": "draft", "draft_failed": "draft",
+                   "check_failed": "draft", "escalated": "escalate"}
 
 tickets = [(t.ticket_id, t.text) for t in
            pd.read_csv(ROOT / "data" / "processed" / "eval_set.csv").sample(10, random_state=5).itertuples()]

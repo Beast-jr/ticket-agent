@@ -1,5 +1,6 @@
 ﻿"""The steps (nodes) of the agent. A node takes the state and returns what it wants to change."""
 import json
+import re
 
 from agent.state import TicketState
 from llm import call_llm
@@ -34,6 +35,7 @@ LOW = 0.45   # confidence < LOW              -> escalate to a human
 TOP1_STRONG = 0.85
 AGREEMENT_LOW = 0.5
 MAX_ATTEMPTS = 2
+MAX_REDRAFTS = 1  # the self-check may send a reply back for ONE rewrite, never more
 OFF_TOPIC_TOP1 = 0.55
 
 CATEGORIES = list(dict.fromkeys(QUEUE_TO_CATEGORY.values()))  # unique, in order
@@ -129,13 +131,14 @@ def retrieve(state: TicketState) -> dict:
 # --- draft ------------------------------------------------------------------
 
 SEVERITIES = ["low", "medium", "high"]
+CITATION_PATTERN = re.compile(r"\[(T\d+)\]")  # inline citations in a reply, like [T01234]
 DRAFT_SYSTEM = (
     "You are a careful customer-support agent. You write replies using only the "
     "evidence you are given. You reply only with JSON."
 )
 
 
-def _build_draft_prompt(state: TicketState, strict: bool) -> str:
+def _build_draft_prompt(state: TicketState, strict: bool, feedback: str = "") -> str:
     past = "\n\n".join(
         f"[{t['ticket_id']}] (category: {t['category']})\n"
         f"PAST TICKET: {t['text']}\nPAST ANSWER: {t['answer']}"
@@ -148,16 +151,26 @@ def _build_draft_prompt(state: TicketState, strict: bool) -> str:
         "Write a reply to the new ticket and a short analysis card.\n"
         "RULES:\n"
         "- Base the reply ONLY on the past answers above. Reuse their advice and wording where it fits.\n"
+        "- CITE YOUR SOURCES: after every sentence that uses information from a past ticket, add that "
+        "ticket's id in square brackets, like [T01234]. Cite at least one ticket, and only ids that appear above.\n"
         "- Do NOT invent product names, prices, phone numbers, email addresses, links, deadlines or policies "
         "that do not appear in the past tickets or the new ticket.\n"
         "- If the past tickets do not really fit the new ticket, say so politely in the reply and ask the "
-        "customer for more details instead of guessing.\n"
+        "customer for more details instead of guessing (still cite the closest ticket).\n"
         "- Never write placeholder tags such as <name> or <tel_num>.\n"
-        "- used_ticket_ids: only the ids (like T01234) of past tickets you actually relied on; use [] if none.\n\n"
+        "- used_ticket_ids: the ids you cited in the reply, no others.\n\n"
         'Reply with JSON only, in this shape:\n'
-        '{"reply": "...", "used_ticket_ids": ["T..."], '
+        '{"reply": "... [T01234] ...", "used_ticket_ids": ["T01234"], '
         '"analysis": {"summary": "...", "root_cause": "...", "suggested_fix": "...", "severity": "low|medium|high"}}'
     )
+    if feedback:
+        prompt += (
+            "\n\nYOUR PREVIOUS REPLY WAS REJECTED by a reviewer.\n"
+            f"PREVIOUS REPLY: {state.get('draft_reply', '')}\n"
+            f"PROBLEM FOUND: {feedback}\n"
+            "Write a new reply that fixes this problem. Remove or rephrase anything the cited past tickets "
+            "do not clearly say, and cite only tickets that exist in the list above."
+        )
     if strict:
         prompt += (
             "\n\nIMPORTANT: your last answer was invalid. Return valid JSON in exactly that shape, "
@@ -167,8 +180,11 @@ def _build_draft_prompt(state: TicketState, strict: bool) -> str:
     return prompt
 
 
-def _parse_draft(raw: str, allowed_ids: set[str]) -> tuple[str, list[str], dict, list[str]]:
-    """Return (reply, used_ids, analysis, dropped_ids) or raise ValueError."""
+def _parse_draft(raw: str) -> tuple[str, list[str], dict]:
+    """Return (reply, cited_ids, analysis) or raise ValueError.
+
+    cited_ids are NOT filtered here: the rule check in the check node must see invented ids.
+    """
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError) as e:
@@ -180,12 +196,11 @@ def _parse_draft(raw: str, allowed_ids: set[str]) -> tuple[str, list[str], dict,
     if not isinstance(reply, str) or not reply.strip():
         raise ValueError("reply is empty")
 
-    used = data.get("used_ticket_ids")
-    if not isinstance(used, list):
+    listed = data.get("used_ticket_ids")
+    if not isinstance(listed, list):
         raise ValueError("used_ticket_ids is not a list")
-    used = [str(u) for u in used]
-    kept = [u for u in used if u in allowed_ids]
-    dropped = [u for u in used if u not in allowed_ids]
+    # cited = the ids in the JSON list plus any [Txxxxx] tags written inside the reply
+    cited = list(dict.fromkeys([str(u) for u in listed] + CITATION_PATTERN.findall(reply)))
 
     raw_analysis = data.get("analysis")
     if not isinstance(raw_analysis, dict):
@@ -200,39 +215,139 @@ def _parse_draft(raw: str, allowed_ids: set[str]) -> tuple[str, list[str], dict,
     if analysis["severity"] not in SEVERITIES:
         raise ValueError(f"severity not allowed: {raw_analysis.get('severity')!r}")
 
-    return reply.strip(), kept, analysis, dropped
+    return reply.strip(), cited, analysis
 
 
-def draft(state: TicketState) -> dict:
-    """Write a reply and an analysis card from the new ticket + similar past tickets."""
+def _run_draft(state: TicketState, label: str, feedback: str = "") -> dict:
+    """Shared by draft and redraft. `label` is the node name used in logs and call steps."""
     log = list(state.get("steps_log", []))
     attempts = state.get("attempts", 0) + 1
-    allowed_ids = {t["ticket_id"] for t in state.get("similar_tickets", [])}
     problem = ""
     for strict in (False, True):  # one normal try, one stricter retry
         raw = call_llm(
-            _build_draft_prompt(state, strict), system=DRAFT_SYSTEM, json_mode=True,
-            step="draft_strict" if strict else "draft",
+            _build_draft_prompt(state, strict, feedback), system=DRAFT_SYSTEM, json_mode=True,
+            step=f"{label}_strict" if strict else label,
         )
         try:
-            reply, used, analysis, dropped = _parse_draft(raw, allowed_ids)
+            reply, cited, analysis = _parse_draft(raw)
         except ValueError as e:
             problem = str(e)
             continue
 
-        if dropped:
-            log.append(f"draft: dropped used_ticket_ids not in the search results: {dropped}")
         if PLACEHOLDER_PATTERN.search(reply):
             reply = clean_placeholders(reply)
-            log.append("draft: removed a raw placeholder tag from the reply")
+            log.append(f"{label}: removed a raw placeholder tag from the reply")
         note = " (after a stricter retry)" if strict else ""
-        log.append(f"draft: reply written{note}, used {len(used)} past tickets, severity {analysis['severity']}")
+        log.append(f"{label}: reply written{note}, cites {len(cited)} past tickets {cited}, "
+                   f"severity {analysis['severity']}")
         return {"draft_reply": reply, "analysis": analysis, "attempts": attempts,
-                "status": "drafted", "steps_log": log, "used_ticket_ids": used}
+                "status": "drafted", "steps_log": log, "used_ticket_ids": cited}
 
-    log.append(f"draft: LLM answer invalid twice ({problem}); status draft_failed")
+    log.append(f"{label}: LLM answer invalid twice ({problem}); status draft_failed")
     return {"draft_reply": "", "attempts": attempts, "status": "draft_failed", "steps_log": log,
             "used_ticket_ids": []}
+
+
+def draft(state: TicketState) -> dict:
+    """Write a reply (with citations) and an analysis card from the similar past tickets."""
+    return _run_draft(state, "draft")
+
+
+def redraft(state: TicketState) -> dict:
+    """Second try after the self-check rejected the reply. The check's reason goes into the prompt."""
+    result = _run_draft(state, "redraft", feedback=state.get("check_reason", "unspecified problem"))
+    result["redrafts"] = state.get("redrafts", 0) + 1
+    return result
+
+
+# --- check (self-check) -----------------------------------------------------
+
+def _rule_check(state: TicketState) -> str:
+    """Cheap checks with no LLM. Returns a problem description, or "" if the rules pass."""
+    if not state.get("draft_reply", "").strip():
+        return "there is no reply to check"
+    cited = state.get("used_ticket_ids", [])
+    if not cited:
+        return "the reply cites no past ticket"
+    retrieved = {t["ticket_id"] for t in state.get("similar_tickets", [])}
+    unknown = [c for c in cited if c not in retrieved]
+    if unknown:
+        return f"the reply cites ticket(s) that were not in the search results: {unknown}"
+    return ""
+
+
+def _build_check_prompt(state: TicketState, strict: bool) -> str:
+    by_id = {t["ticket_id"]: t for t in state["similar_tickets"]}
+    evidence = "\n\n".join(
+        f"[{i}] PAST TICKET: {by_id[i]['text']}\n    PAST RESOLUTION: {by_id[i]['answer']}"
+        for i in state["used_ticket_ids"]
+    )
+    prompt = (
+        f"REPLY TO CHECK:\n{state['draft_reply']}\n\n"
+        f"EVIDENCE - the ONLY past tickets this reply is allowed to rely on:\n{evidence}\n\n"
+        f"THE CUSTOMER'S OWN WORDS (facts the customer stated need no support):\n{state['text']}\n\n"
+        "Question: is every claim in the reply supported by the evidence above?\n"
+        "A claim is any concrete fact, step, promise, product name, number, contact detail, deadline or "
+        "policy. Ignore greetings, thanks, apologies, the [T...] citation tags, restating the customer's own "
+        "problem, and polite requests for more information (these need no support). Be strict: if the reply "
+        "says something the evidence does not say, the verdict is not_supported and the reason must name it.\n"
+        'Reply with JSON only: {"verdict": "supported" or "not_supported", "reason": "one short sentence"}'
+    )
+    if strict:
+        prompt += '\n\nIMPORTANT: "verdict" must be exactly "supported" or "not_supported". Return valid JSON only.'
+    return prompt
+
+
+def _parse_verdict(raw: str) -> tuple[str, str]:
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as e:
+        raise ValueError(f"broken JSON: {e}")
+    if not isinstance(data, dict):
+        raise ValueError("JSON is not an object")
+    verdict = str(data.get("verdict", "")).strip().lower()
+    if verdict not in ("supported", "not_supported"):
+        raise ValueError(f"verdict not allowed: {data.get('verdict')!r}")
+    return verdict, str(data.get("reason", "")).strip()
+
+
+def check(state: TicketState) -> dict:
+    """Self-check: is every claim in the reply backed by the tickets it cites?
+
+    The rule check runs first and costs nothing. Only if it passes do we ask the LLM.
+    """
+    log = list(state.get("steps_log", []))
+    n = state.get("check_attempts", 0) + 1
+
+    problem = _rule_check(state)
+    if problem:
+        verdict, reason, how = "not_supported", problem, "rule check"
+    else:
+        verdict, reason, how, last_problem = "not_supported", "", "LLM check", ""
+        for strict in (False, True):
+            raw = call_llm(_build_check_prompt(state, strict), system=SYSTEM, json_mode=True,
+                           step="check_strict" if strict else "check")
+            try:
+                verdict, reason = _parse_verdict(raw)
+                break
+            except ValueError as e:
+                last_problem = str(e)
+        else:  # the checker never gave a usable answer: fail safe, treat as not supported
+            verdict, reason = "not_supported", f"the checker gave an invalid answer twice ({last_problem})"
+
+    log.append(f"check: {verdict} ({how}) - {reason}")
+    return {"check_result": verdict, "check_reason": reason, "check_attempts": n,
+            "status": "replied" if verdict == "supported" else "check_failed", "steps_log": log}
+
+
+def after_check(state: TicketState) -> str:
+    """Conditional edge after check: done, redraft (only once) or escalate."""
+    if state["check_result"] == "supported":
+        return "done"
+    if state.get("redrafts", 0) < MAX_REDRAFTS:
+        return "redraft"
+    return "escalate"
+
 
 # --- confidence + routing ---------------------------------------------------
 
@@ -391,6 +506,10 @@ def rewrite_query(state: TicketState) -> dict:
 
 def _escalation_reason(state: TicketState) -> str:
     conf, top = state["confidence"], state["top_score"]
+    if state.get("check_result") == "not_supported":
+        return (f"the self-check rejected the reply {state.get('check_attempts', 0)} time(s) and the "
+                f"one allowed redraft did not fix it. Last reason: {state.get('check_reason', '')} "
+                f"(search confidence was {conf:.2f}, best match {top:.2f})")
     if conf < LOW:
         return (f"confidence {conf:.2f} is below the escalation limit of {LOW}; "
                 f"the best past match scores only {top:.2f}")
@@ -427,12 +546,16 @@ def escalate(state: TicketState) -> dict:
         f"{' '.join(t['text'].split())[:80]}"
         for t in state.get("similar_tickets", [])[:3]
     ) or "  (none)"
+    rejected = state.get("draft_reply", "") if state.get("check_result") == "not_supported" else ""
     summary = (
         f"PROBLEM: {_problem_paragraph(state)}\n\n"
         f"WHY ESCALATED: {_escalation_reason(state)}\n\n"
         f"WHAT WAS TRIED:\n{tried}\n\n"
         f"CLOSEST PAST TICKETS:\n{closest}"
     )
+    if rejected:
+        summary += f"\n\nLAST REJECTED DRAFT (do NOT send to the customer):\n  {rejected}"
     log.append("escalate: ticket handed to a human with a summary "
                f"({'template' if state['top_score'] < OFF_TOPIC_TOP1 else 'LLM'} paragraph)")
-    return {"status": "escalated", "escalation_summary": summary, "steps_log": log}
+    # draft_reply is cleared so a rejected reply can never be shown to the customer by mistake
+    return {"status": "escalated", "escalation_summary": summary, "draft_reply": "", "steps_log": log}

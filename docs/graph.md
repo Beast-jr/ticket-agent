@@ -14,22 +14,28 @@ graph TD;
 	retrieve(retrieve)
 	score_confidence(score_confidence)
 	draft(draft)
+	check(check)
+	redraft(redraft)
 	reconcile_category(reconcile_category)
 	rewrite_query(rewrite_query)
 	escalate(escalate)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> classify;
+	check -. &nbsp;done&nbsp; .-> __end__;
+	check -.-> escalate;
+	check -.-> redraft;
 	classify --> retrieve;
+	draft --> check;
 	reconcile_category -.-> draft;
 	reconcile_category -.-> escalate;
 	reconcile_category -.-> rewrite_query;
+	redraft --> check;
 	retrieve --> score_confidence;
 	rewrite_query --> retrieve;
 	score_confidence -.-> draft;
 	score_confidence -.-> escalate;
 	score_confidence -.-> reconcile_category;
 	score_confidence -.-> rewrite_query;
-	draft --> __end__;
 	escalate --> __end__;
 	reconcile_category -.-> reconcile_category;
 	classDef default fill:#f2f0ff,line-height:1.2

@@ -138,3 +138,58 @@ The 110-ticket run (100 eval + 10 off-topic) is still to be done. The free Groq 
 | escalated | TODO | TODO |
 
 Average LLM calls per ticket: TODO (in-domain), TODO (off-topic).
+
+---
+
+# Day 7: the self-check (catching made-up replies)
+
+Everything above decides *whether to try* answering. The self-check decides whether the answer that was written is *safe to send*. A reply can be well-written and still contain a promise or a fact that none of the past tickets support.
+
+## What the draft step does now
+
+The draft prompt tells the LLM to cite its sources: after every sentence that uses a past ticket it adds the id, like `[T01234]`, and it returns the list of cited ids (`used_ticket_ids`). The code no longer silently drops ids that are not in the search results (Day 4 did). It keeps them, so the check can catch them. Cited ids are the JSON list plus any `[T....]` tags found inside the reply text.
+
+Citations stay in `draft_reply`. A later step could strip them from the customer-facing version.
+
+## What the check does (two layers)
+
+**Layer 1: rule check (no LLM, runs first).** Three plain rules:
+1. There is a reply to check.
+2. The reply cites at least 1 ticket.
+3. Every cited id is one of the tickets retrieved for *this* ticket.
+
+If a rule fails, the verdict is `not_supported` right away and the LLM is **not called**.
+
+**Layer 2: LLM check.** Only if the rules pass. The LLM sees the reply and only the cited tickets (their text and their past resolution), and answers `{"verdict": "supported" | "not_supported", "reason": "..."}`. It is told to be strict about concrete claims (facts, steps, promises, product names, numbers, contact details, deadlines, policies) and to ignore greetings, apologies, citation tags and polite requests for more information. If the checker's own answer is unusable twice, the verdict is `not_supported` (fail safe).
+
+One deliberate addition to "show ONLY the cited tickets": the checker also sees the customer's own ticket text, labelled as the customer's words. Without it, a reply that simply restates the customer's problem ("we understand access logs are being examined") would be flagged as unsupported, because that fact comes from the customer and not from a past ticket.
+
+## Why the rule check runs before the LLM
+
+- **It is free.** No tokens, no waiting. Given the Groq daily limit, that matters.
+- **It catches the worst failure for sure.** A cited id that does not exist is a fabrication that no LLM judgement is needed to detect, and an LLM can be fooled where a set lookup cannot.
+- **It cannot give a wrong answer about ids.** The LLM check is only used for the judgement that needs judgement: do these tickets actually say that?
+
+A side effect: a polite "I need more details" reply that cites nothing fails the rule check. That is intended, since a reply with no source is not supported. The prompt asks the LLM to cite the closest ticket even then.
+
+## What happens after the check
+
+| Check result | What happens | Final status |
+|---|---|---|
+| supported | done | `replied` |
+| not supported, no redraft yet | `redraft` once. The check's reason and the rejected reply go into the redraft prompt. Then check again. | (continues) |
+| not supported again | `escalate`. The reason appears in the "WHY ESCALATED" part of `escalation_summary`, with the last rejected draft marked "do NOT send". | `escalated` |
+
+**Redraft limit: exactly 1** (`MAX_REDRAFTS = 1` in `nodes.py`, counted by `redrafts` in the state). The worst case for one ticket is 1 draft, 1 redraft, 2 checks, then the escalation summary.
+
+When a ticket is escalated after a failed check, `draft_reply` is cleared so a rejected reply can never be shown to a customer by mistake.
+
+## Tests
+
+`tests/test_check.py` (11 tests, run with `python -m pytest tests`) uses a fake LLM and a fake search, so it never touches Groq or the database. It covers: a good reply is `replied`; an invented id fails the rule check with **zero** LLM calls; a failed check followed by a good redraft ends `replied` with 1 redraft; two failed checks escalate with the reason in the summary; and there is never more than 1 redraft.
+
+## TODO: live self-check test pending quota
+
+Live self-check test pending quota: run a ticket with no good match and confirm it ends escalated, not answered.
+
+Also still to check live: how often the real LLM check says `not_supported` on good replies (false alarms), and how often it lets a bad reply through. The mocked tests prove the wiring, not the quality of the LLM's judgement.

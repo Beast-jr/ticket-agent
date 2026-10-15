@@ -2,7 +2,8 @@
 
 To save LLM tokens, the draft step is replaced by a stub here: drafting never changes which
 route a ticket takes, and in the logs the real draft step is always exactly 1 LLM call, so the
-call count adds 1 for every ticket that reaches draft.
+call count adds 1 for every ticket that reaches draft. The Day 7 self-check is stubbed out too
+(these are the Day 6 numbers, which were defined before the check existed).
 
 Progress is saved after every ticket to docs/routing_day6.csv. If the LLM rate limit is hit the
 script stops cleanly; run it again later and it continues where it stopped.
@@ -36,7 +37,14 @@ def draft_stub(state):
     return {"status": "drafted", "attempts": state.get("attempts", 0) + 1, "steps_log": log}
 
 
-graph_module.draft = draft_stub  # build_graph() looks this name up when the graph is first built
+def check_stub(state):
+    """The self-check (Day 7) is not part of the Day 6 numbers: pass every stub draft straight through."""
+    return {"check_result": "supported"}
+
+
+# build_graph() looks these names up when the graph is first built
+graph_module.draft = draft_stub
+graph_module.check = check_stub
 
 
 def llm_calls() -> int:

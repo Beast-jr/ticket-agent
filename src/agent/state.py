@@ -24,8 +24,11 @@ class TicketState(TypedDict, total=False):
     agreement: float               # share of similar tickets with the classified category
     attempts: int                  # how many retry steps (reconcile / rewrite) and drafts so far
     search_query: str              # what we searched for (can be rewritten on retry)
-    check_result: str              # outcome of the self-check step
-    status: str                    # e.g. new / classified / done
+    check_result: str              # supported / not_supported (set by check)
+    check_reason: str              # why the self-check said that
+    check_attempts: int            # how many times the self-check has run
+    redrafts: int                  # how many times the reply was rewritten after a failed check (max 1)
+    status: str                    # new / classified / drafted / replied / escalated
     escalation_summary: str        # hand-over note for a human (set by escalate)
     reconciled: bool               # True once reconcile_category has run (it only runs once)
     confidence_history: list[float]  # confidence after each scoring, oldest first
