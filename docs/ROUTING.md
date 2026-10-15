@@ -68,3 +68,73 @@ How the threshold choice changes things (in-domain draft / rewrite / escalate, o
 - **The eval tickets are unusually easy to match.** The knowledge base contains many near-copies of the same synthetic ticket. Real customer tickets would probably score lower, so these thresholds should be checked again on real data.
 - **The retry band is driven by label noise.** Most of the 17 "rewrite" tickets have a high similarity score (often 0.85 to 0.94) but category agreement 0.0, meaning the similar tickets carry different labels than the agent's classification. Those tickets are borderline mostly because the dataset labels disagree, not because the search failed.
 - **The classifier has no "Other" option.** An off-topic ticket still gets a category (the cooking question became "Customer Service"). The confidence score catches it, not the classifier.
+
+---
+
+# Day 6: the middle band gets smart
+
+Day 5 sent every middle-band ticket (confidence 0.45 to 0.75) to a rewrite. The calibration data showed that is the wrong fix for about half of them, so the router now looks at *why* confidence is low.
+
+## The rules
+
+| Situation | Route |
+|---|---|
+| confidence >= 0.75 | draft |
+| confidence < 0.45 | escalate |
+| middle band, 2 retry steps already used | escalate (never loop forever) |
+| middle band, top score >= 0.85, agreement < 0.5, not reconciled yet | **reconcile_category** |
+| any other middle-band ticket | **rewrite_query** |
+
+All settings (`TOP1_STRONG = 0.85`, `AGREEMENT_LOW = 0.5`, `MAX_ATTEMPTS = 2`, `OFF_TOPIC_TOP1 = 0.55`) are at the top of `src/agent/nodes.py`.
+
+## Where 0.85 came from
+
+The 17 middle-band in-domain tickets in `docs/calibration.csv`, sorted by top-1 score:
+
+| Top-1 score | Tickets | Category agreement | Diagnosis |
+|---|---|---|---|
+| below 0.85 (0.63 to 0.84) | 8 | 0.0 to 0.6, mixed | weak matches -> rewrite the query |
+| 0.85 or more (0.86 to 0.94) | 9 | **0.0 for all 9** | search worked, labels disagree -> reconcile |
+
+The split sits in a natural gap (0.843 and 0.858 are the neighbours), so 0.85 is not a fine-tuned number.
+
+`OFF_TOPIC_TOP1 = 0.55`: off-topic tickets scored at most 0.45 and real tickets never went below 0.63. Below 0.55 the escalation summary uses a fixed template and no LLM call.
+
+## What reconcile does (checked on the 9 conflict tickets)
+
+I ran reconcile on all 9 conflict tickets. After the prompt was changed to tell the LLM to follow how similar tickets are filed, **all 9 reached confidence 0.77 or higher** (0.77 to 0.91) and would be drafted.
+
+The first version of the prompt told the LLM to "use your own judgement", and on the first test ticket (T28372) it simply kept its old category, which sent the ticket on to a rewrite and then an escalation. Telling it to follow the neighbours' majority fixed that.
+
+Caveats:
+- The new category matched the dataset's own label in only 2 of the 9 tickets (before reconcile, 1 of 9). The dataset labels are noisy (see `DATA_NOTES.md`), so "matches the neighbours" and "matches the dataset label" are different things. For the reply this matters little, because the reply is built from the neighbours' answers.
+- Confidence rises partly by construction: moving the category toward the neighbours raises agreement. A "drafted after reconcile" ticket is therefore less certain than a "drafted directly" one.
+- These 9 tickets were also the ones used to pick the 0.85 cutoff, so this check is not independent.
+
+## Four deliberate test cases (`scripts/try_cases.py`)
+
+| Case | Path | Result |
+|---|---|---|
+| a) easy ticket (T15090) | classify, retrieve, score, draft | drafted directly, confidence 0.96, 2 LLM calls |
+| b) label conflict (T28372) | classify, retrieve, score, reconcile_category, draft | drafted, confidence 0.69 -> 0.77, 3 LLM calls |
+| c) vague: "it's broken again since yesterday, same as last time, please fix asap" | classify, retrieve, score, rewrite, retrieve, score, rewrite, retrieve, score, escalate | escalated, confidence 0.55 -> 0.57, 4 LLM calls (LLM summary) |
+| d) nonsense: "qwerty zxcvb lorem asdf 12345 !!!" | classify, retrieve, score, escalate | escalated, confidence 0.20, 1 LLM call (template summary) |
+
+Case c showed that the second rewrite can return the same query as the first. The node now detects that and uses up the remaining retries instead of searching again (only the first loop really changes the search).
+
+## TODO: full outcome counts (blocked by the Groq daily token limit)
+
+The 110-ticket run (100 eval + 10 off-topic) is still to be done. The free Groq limit for `openai/gpt-oss-120b` (200,000 tokens/day) ran out at ticket 41 of 110 during development. `scripts/evaluate_routing.py` is now resumable and skips the draft LLM call (a draft is always exactly 1 call in the logs and never changes the route), so it needs about 80,000 tokens. Once the quota resets:
+
+1. `python scripts/evaluate_routing.py` (writes `docs/routing_day6.csv`; run it again if it stops at the limit).
+2. Fill in this table and the average LLM calls per ticket:
+
+| Outcome | In-domain (100) | Off-topic (10) |
+|---|---|---|
+| drafted directly | TODO | TODO |
+| drafted after reconcile | TODO | TODO |
+| drafted after rewrite | TODO | TODO |
+| drafted after reconcile + rewrite | TODO | TODO |
+| escalated | TODO | TODO |
+
+Average LLM calls per ticket: TODO (in-domain), TODO (off-topic).

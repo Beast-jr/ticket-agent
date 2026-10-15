@@ -22,8 +22,11 @@ class TicketState(TypedDict, total=False):
     confidence: float              # how sure the agent is (0-1)
     top_score: float               # best similarity score from the search
     agreement: float               # share of similar tickets with the classified category
-    attempts: int                  # how many times we tried to draft a reply
+    attempts: int                  # how many retry steps (reconcile / rewrite) and drafts so far
     search_query: str              # what we searched for (can be rewritten on retry)
     check_result: str              # outcome of the self-check step
     status: str                    # e.g. new / classified / done
+    escalation_summary: str        # hand-over note for a human (set by escalate)
+    reconciled: bool               # True once reconcile_category has run (it only runs once)
+    confidence_history: list[float]  # confidence after each scoring, oldest first
     steps_log: list[str]           # plain-English diary of what happened

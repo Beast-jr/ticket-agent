@@ -209,6 +209,101 @@ State **at the router**:
 
 Interesting detail: the classifier did not notice the ticket was off-topic. The *search scores* did. The scores are a more honest signal than asking the LLM.
 
+## Day 6: loops (the graph can go back)
+
+So far every ticket moved forward only. A **loop** is an edge that points *backwards* to a node that already ran, so the agent can try again with new information.
+
+**Analogy: a doctor who is not sure.** Two different doubts need two different actions:
+- "The test results are clear, but two of my colleagues label this condition differently." -> don't repeat the test, just **decide which label to use** (`reconcile_category`).
+- "The test result is blurry." -> **repeat the test with a better sample** (`rewrite_query`, then search again).
+- "I have tried twice and it is still unclear." -> **stop and refer the patient** (`escalate`).
+
+Why the middle band is low tells us which fix to use. The router now has four exits:
+
+| Situation | Route |
+|---|---|
+| confidence 0.75 or more | `draft` |
+| confidence below 0.45 | `escalate` |
+| middle band, best match score 0.85 or more, but few similar tickets share our category (the search worked, the labels disagree) | `reconcile_category` |
+| middle band, weaker matches | `rewrite_query` |
+| middle band, but 2 retry steps already used | `escalate` |
+
+The two loops:
+- **reconcile_category -> router.** The LLM sees the ticket and the 5 similar tickets with their categories, and picks the final category. The node recomputes agreement and confidence and goes straight back to the router. It runs at most once per ticket (`reconciled` flag in the state).
+- **rewrite_query -> retrieve -> score_confidence -> router.** The LLM turns the ticket into a short search query, and the search runs again with it. If the rewrite comes out identical to the old query, retrying is pointless, so the retries are used up at once.
+
+**Why a loop cannot run forever:** every reconcile or rewrite adds 1 to `attempts`. The router escalates when `attempts` reaches 2 (`MAX_ATTEMPTS` in `nodes.py`). So the longest possible path is two retry steps and then escalate.
+
+**The escalate node is real now.** It sets `status = "escalated"` and writes `escalation_summary` for a human: a problem paragraph, why it was escalated, what was tried (the `steps_log`), and the 3 closest past tickets. When the best match score is below 0.55 (nothing in the history looks like this ticket, for example gibberish) it uses a fixed template instead of asking the LLM, which saves a call.
+
+The full picture is in the docstring of `src/agent/graph.py`, and a generated diagram is in `docs/graph.md`.
+
+### Dry run of a label conflict: ticket T28372
+
+> Hello Customer Support, I hope this message finds you well. I am writing to seek assistance with the inconsistent results we are encountering in our digital strategy. It seems there might be some issues related to software integration and data discrepancies. Despite our efforts to troubleshoot by updating the software and cross-referencing the analytics, we have not yet seen any improvements. [...]
+
+The dataset's own label is Product Support, priority medium. Path taken: `classify -> retrieve -> score_confidence -> reconcile_category -> draft`. Tables show only the fields that changed at each node.
+
+**Start** (made by `run_ticket`): `ticket_id = "T28372"`, `text`, `attempts = 0`, `reconciled = False`, `confidence_history = []`, `status = "new"`, `steps_log = []`.
+
+**1. After classify**
+
+| Field | Value |
+|---|---|
+| `category` | `"Technical & IT Support"` |
+| `priority` | `"high"` |
+| `classify_reason` | "Inconsistent results due to software integration and data discrepancies" |
+| `status` | `"new"` -> `"classified"` |
+| `steps_log` | + `classify: Technical & IT Support / high - ...` |
+
+**2. After retrieve**
+
+| Field | Value |
+|---|---|
+| `similar_tickets` | T23563 0.86 (Product Support), T19586 0.80 (Returns and Exchanges), T15087 0.79 (Customer Service), T28314 0.79 (Customer Service), T15463 0.79 (Product Support) |
+| `search_query` | the ticket text (it was empty) |
+| `steps_log` | + `retrieve: found 5 similar tickets, top score 0.86` |
+
+**3. After score_confidence**
+
+| Field | Value |
+|---|---|
+| `top_score` | 0.8584 |
+| `agreement` | 0.0 (none of the 5 are Technical & IT Support) |
+| `confidence` | 0.8 x 0.8584 + 0.2 x 0.0 = **0.6867** |
+| `confidence_history` | `[0.6867]` |
+| `steps_log` | + `score_confidence: confidence 0.69 (top score 0.86, category agreement 0.0) -> route: reconcile_category` |
+
+**Router:** 0.69 is in the middle band (0.45 to 0.75), attempts = 0, the top score 0.86 is at least 0.85 and agreement is below 0.5, and `reconciled` is False. So it returns `"reconcile_category"`.
+
+**4. After reconcile_category**
+
+| Field | Value |
+|---|---|
+| `category` | `"Technical & IT Support"` -> `"Product Support"` (the LLM: "Matches majority of similar tickets and concerns product functionality") |
+| `agreement` | 0.0 -> 0.4 (2 of the 5 are now Product Support) |
+| `confidence` | 0.6867 -> **0.7667** (0.8 x 0.8584 + 0.2 x 0.4) |
+| `confidence_history` | `[0.6867, 0.7667]` |
+| `reconciled` | `False` -> `True` |
+| `attempts` | `0` -> `1` |
+| `steps_log` | + `reconcile_category: changed 'Technical & IT Support' to 'Product Support' - ... (agreement 0.0 -> 0.4, confidence 0.69 -> 0.77)` |
+
+**Router again** (same function, new numbers): 0.7667 is at least 0.75, so it returns `"draft"`.
+
+**5. After draft**
+
+| Field | Value |
+|---|---|
+| `draft_reply` | "Hello, thank you for reaching out to us regarding the inconsistent results you are seeing in your digital strategy. [...] could you please provide more details about the software integration and the specific data discrepancies...?" |
+| `used_ticket_ids` | 3 of the 5 similar tickets |
+| `analysis` | filled in, severity `"high"` |
+| `attempts` | `1` -> `2` (draft also counts) |
+| `status` | `"classified"` -> `"drafted"` |
+| `steps_log` | + `draft: reply written, used 3 past tickets, severity high` |
+
+This ticket cost 3 LLM calls (classify, reconcile, draft) instead of the usual 2.
+
+An honest note: reconcile moved the category to match how the *neighbours* are filed. That is also why the confidence rose, so part of the improvement is by construction. It is a reasonable choice here because the reply is built from those neighbours' answers, but it means "reconciled" tickets are less certain than "drafted directly" ones.
 ## How this will grow
 
 Each new day adds nodes or edges. The chart gets longer, and the graph gets forks and loops.
@@ -217,6 +312,8 @@ Each new day adds nodes or edges. The chart gets longer, and the graph gets fork
 Day 3   START -> classify -> END
 
 Day 4   START -> classify -> retrieve -> draft -> END   (done)
+
+Day 5-6 router, reconcile/rewrite loops, real escalate   (done, see above)
         retrieve: search the past tickets (src/search.py) and fill similar_tickets
         draft:    write a reply using those tickets as examples
 
