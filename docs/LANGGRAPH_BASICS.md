@@ -139,6 +139,76 @@ What the draft node checks before it accepts the LLM's answer:
 
 If the answer is invalid, it tries once more with a stricter prompt. If that fails too, `status` becomes `"draft_failed"` and there is no reply.
 
+## Day 5: conditional edges (the graph starts to choose)
+
+Until now every arrow went to one fixed place. A **conditional edge** is an arrow with a fork. Instead of saying "after this node, go to X", it says "after this node, ask a small function which way to go".
+
+**Analogy: the triage nurse.** After checking your vitals, the nurse looks at one number and says "routine, go to the doctor", "unclear, let's re-check you", or "this is not something we handle, here is a referral". The nurse does not treat you, they only point.
+
+In our graph:
+
+```
+START -> classify -> retrieve -> score_confidence -> router -+-> draft ---------+-> END
+                                                              +-> rewrite_query -+
+                                                              +-> escalate ------+
+```
+
+- **score_confidence** is a normal node. It computes the confidence number and writes it into the state.
+- **router** is *not* a node. It is a small function (`router(state)` in `nodes.py`) that reads `confidence` and returns a name: `"draft"`, `"rewrite_query"` or `"escalate"`. It never changes the state.
+- In `graph.py`, `add_conditional_edges("score_confidence", router, {...})` connects that returned name to the node with the same name.
+- Today `rewrite_query` and `escalate` are placeholders. They only set `status` and write a log line. Day 6 makes them real.
+
+The rule (numbers explained in `ROUTING.md`):
+
+| Confidence | Route | Status afterwards |
+|---|---|---|
+| 0.75 or more | draft | `drafted` |
+| 0.45 up to 0.75 | rewrite_query | `needs_rewrite` |
+| below 0.45 | escalate | `escalated` |
+
+### Dry run A: a ticket that goes to draft (T15090)
+
+> Concerns About Hospital Security Systems
+>
+> Suspected data breach, currently examining access logs
+
+State **at the router** (right after score_confidence):
+
+| Field | Value |
+|---|---|
+| `category` | Technical & IT Support |
+| `priority` | high |
+| `similar_tickets` | T11305 0.99, T23267 0.97, T13969 0.86, T21192 0.85, T10969 0.84 |
+| `top_score` | 0.9942 (new in this step) |
+| `agreement` | 0.8 (4 of the 5 are Technical & IT Support) (new) |
+| `confidence` | 0.8 x 0.9942 + 0.2 x 0.8 = **0.9554** (new) |
+| `status` | `classified` (unchanged) |
+| `steps_log` (new last line) | `score_confidence: confidence 0.96 (top score 0.99, category agreement 0.8) -> route: draft` |
+
+0.9554 is at least 0.75, so the router returns `"draft"`. The draft node then writes the reply, `status` becomes `drafted` and `attempts` becomes 1.
+
+### Dry run B: a ticket that goes to escalate (OFF01)
+
+> How do I make a good carbonara? I always end up with scrambled eggs.
+
+State **at the router**:
+
+| Field | Value |
+|---|---|
+| `category` | Customer Service (the classifier must pick something, so it picked the nearest-sounding one) |
+| `priority` | low |
+| `classify_reason` | "User asks a general cooking question unrelated to support topics" |
+| `similar_tickets` | T16421 0.27, T16955 0.22, T17960 0.20, T11460 0.20, T28090 0.19 |
+| `top_score` | 0.2707 (new) |
+| `agreement` | 0.2 (only 1 of 5 is Customer Service) (new) |
+| `confidence` | 0.8 x 0.2707 + 0.2 x 0.2 = **0.2565** (new) |
+| `status` | `classified` (unchanged) |
+| `steps_log` (new last line) | `score_confidence: confidence 0.26 (top score 0.27, category agreement 0.2) -> route: escalate` |
+
+0.2565 is below 0.45, so the router returns `"escalate"`. The escalate placeholder sets `status` to `escalated` and logs that the ticket was handed to a human. **No `draft_reply` is written**, and the LLM is called only once (for classify). That is the point of the router: a bad match costs less and never produces a made-up reply.
+
+Interesting detail: the classifier did not notice the ticket was off-topic. The *search scores* did. The scores are a more honest signal than asking the LLM.
+
 ## How this will grow
 
 Each new day adds nodes or edges. The chart gets longer, and the graph gets forks and loops.

@@ -6,6 +6,22 @@ from llm import call_llm
 from prepare_data import PLACEHOLDER_PATTERN, QUEUE_TO_CATEGORY, clean_placeholders
 from search import search_similar
 
+# --- Routing settings (calibrated on Day 5, see docs/ROUTING.md and docs/calibration.csv) ---
+# confidence = W_TOP1 * (best similarity score) + W_AGREEMENT * (category agreement)
+#
+# Why this formula:
+# - The best similarity score is the strongest signal. On the calibration run, off-topic
+#   tickets scored at most 0.45 while real tickets scored 0.63-1.00.
+# - Category agreement (how many of the 5 similar tickets have the same category as the
+#   classified one) adds a second opinion, but this dataset's labels are noisy: even good
+#   in-domain tickets have a median agreement of only 0.4. So it gets the smaller weight.
+# - A plain weighted average is easy to explain and easy to re-tune.
+W_TOP1 = 0.8
+W_AGREEMENT = 0.2
+HIGH = 0.75  # confidence >= HIGH            -> draft a reply
+LOW = 0.45   # LOW <= confidence < HIGH      -> rewrite the search query and try again
+#              confidence < LOW              -> escalate to a human
+
 CATEGORIES = list(dict.fromkeys(QUEUE_TO_CATEGORY.values()))  # unique, in order
 PRIORITIES = ["low", "medium", "high"]
 
@@ -203,3 +219,51 @@ def draft(state: TicketState) -> dict:
     log.append(f"draft: LLM answer invalid twice ({problem}); status draft_failed")
     return {"draft_reply": "", "attempts": attempts, "status": "draft_failed", "steps_log": log,
             "used_ticket_ids": []}
+
+
+# --- confidence + routing ---------------------------------------------------
+
+def choose_route(confidence: float) -> str:
+    """Turn a confidence score into the next step: draft, rewrite_query or escalate."""
+    if confidence >= HIGH:
+        return "draft"
+    if confidence >= LOW:
+        return "rewrite_query"
+    return "escalate"
+
+
+def score_confidence(state: TicketState) -> dict:
+    """How sure are we that the past tickets fit this one? A number from 0 to 1."""
+    similar = state.get("similar_tickets", [])
+    if similar:
+        top_score = similar[0]["similarity"]
+        agreement = sum(t["category"] == state.get("category") for t in similar) / len(similar)
+    else:
+        top_score = agreement = 0.0
+    confidence = round(W_TOP1 * top_score + W_AGREEMENT * agreement, 4)
+    log = list(state.get("steps_log", []))
+    log.append(
+        f"score_confidence: confidence {confidence:.2f} (top score {top_score:.2f}, "
+        f"category agreement {agreement:.1f}) -> route: {choose_route(confidence)}"
+    )
+    return {"confidence": confidence, "top_score": round(top_score, 4), "agreement": agreement,
+            "steps_log": log}
+
+
+def router(state: TicketState) -> str:
+    """Conditional edge: returns the NAME of the next node. It does not change the state."""
+    return choose_route(state["confidence"])
+
+
+def rewrite_query(state: TicketState) -> dict:
+    """PLACEHOLDER (built properly on Day 6): just marks the ticket as needing a rewrite."""
+    log = list(state.get("steps_log", []))
+    log.append("rewrite_query: placeholder - search not good enough, query rewrite comes on Day 6")
+    return {"status": "needs_rewrite", "steps_log": log}
+
+
+def escalate(state: TicketState) -> dict:
+    """PLACEHOLDER (built properly on Day 6): just marks the ticket as escalated to a human."""
+    log = list(state.get("steps_log", []))
+    log.append("escalate: placeholder - confidence too low, ticket handed to a human")
+    return {"status": "escalated", "steps_log": log}

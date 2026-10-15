@@ -1,0 +1,111 @@
+set,ticket_id,text,real_category,category,top1,avg5,agreement
+in_domain,T00252,"Connectivity Problem with Network Equipment  Dear Support Team,\n\nOur marketing",Technical & IT Support,Technical & IT Support,0.833,0.8076,0.8
+in_domain,T00325,Urgent Security Breach Impacting Healthcare System Integrations  Dear Customer S,Technical & IT Support,Technical & IT Support,0.843,0.8179,0.2
+in_domain,T00353,"Google Keep Synchronization Problem  Dear Customer Support Team,\n\nI am writing",Technical & IT Support,Technical & IT Support,0.7035,0.6675,0.6
+in_domain,T00418,Urgent Security Breach Impacting EMR Integration Platform  Dear Customer Support,Product Support,Technical & IT Support,0.9755,0.8691,0.2
+in_domain,T00541,"Multiple Equipment Malfunctions Reported  Dear Customer Support Team,\n\nI am su",Technical & IT Support,Technical & IT Support,0.7629,0.7515,0.8
+in_domain,T00938,Assistance with Salesforce CRM Integration  Customer Support team is seeking com,Technical & IT Support,Product Support,0.8224,0.8125,0.0
+in_domain,T01024,Service Interruptions Affecting Marketing Agency Systems  Our customer support t,Service Outages and Maintenance,Service Outages and Maintenance,0.8776,0.8531,1.0
+in_domain,T01709,Offer comprehensive instructions for integrating Malwarebytes with Wix.,Technical & IT Support,Product Support,0.6271,0.5912,0.2
+in_domain,T01754,Support Request for Marketing Agency  The marketing agency has encountered wides,Product Support,Technical & IT Support,0.8379,0.8099,0.8
+in_domain,T01854,"Digital Campaigns Underperformance in the Quarter  Customer Support, composing a",Customer Service,Product Support,0.9543,0.9142,0.4
+in_domain,T02105,Billing Inconsistencies Across Multiple Product Subscriptions Detected  Customer,Billing and Payments,Billing and Payments,0.9778,0.9268,1.0
+in_domain,T03000,Server Update Leading to Problems  Users are facing delays in response times,Technical & IT Support,Technical & IT Support,0.901,0.7961,0.8
+in_domain,T03216,Problem with Accessing the Project Dashboard  Customer Support is facing sporadi,Technical & IT Support,Technical & IT Support,0.9736,0.8836,0.6
+in_domain,T03461,"Customer Support, reporting an issue with the digital campaign platforms of our ",Technical & IT Support,Technical & IT Support,0.9835,0.9382,1.0
+in_domain,T03548,"Revise Digital Marketing Platform Tools  Customer support team, I am requesting ",Technical & IT Support,Sales and Pre-Sales,0.9158,0.8527,0.0
+in_domain,T03675,"Assistance Needed for Digital Tools Integration Problem  Customer Support, I am ",Customer Service,Technical & IT Support,0.917,0.8309,0.4
+in_domain,T03754,Data Analytics System Malfunction and Resolution  The data analytics system expe,Customer Service,Technical & IT Support,0.8861,0.8775,0.0
+in_domain,T03873,Digital Tools of Marketing Agency Are Fully Out of Service  Customer Support has,Technical & IT Support,Technical & IT Support,0.8987,0.8842,1.0
+in_domain,T03972,"Customer Support, I am requesting enhancements to data analytics integration to ",Product Support,Product Support,0.9667,0.914,0.6
+in_domain,T04228,"Service Outage Support Inquiry  Facing problems with Pro Tools, Blackboard Learn",Service Outages and Maintenance,Service Outages and Maintenance,0.9579,0.82,0.6
+in_domain,T04453,The financial organization faced setbacks in delivering investment analytics rep,Sales and Pre-Sales,Technical & IT Support,0.8774,0.7662,0.0
+in_domain,T05394,Revise Access Rights  Customer support is requesting an update to user access ri,Human Resources,Technical & IT Support,0.9771,0.7846,0.6
+in_domain,T05695,Suspicion of Security Compromise  A potential security compromise is suspected d,Technical & IT Support,Technical & IT Support,0.9107,0.8026,1.0
+in_domain,T05937,Upgraded Data Analytics Assistance  Integrate advanced data analytics to improve,Customer Service,Product Support,0.9373,0.8526,0.0
+in_domain,T05943,Interruption in Digital Marketing Productivity Tools  Drafting a report on sever,Technical & IT Support,Technical & IT Support,0.9849,0.9133,0.6
+in_domain,T06641,Marketing Agency Malfunction  The campaigns did not achieve the anticipated bran,Product Support,Technical & IT Support,0.865,0.7413,0.0
+in_domain,T07103,Recurring Crashes in SaaS Platform  Facing recurring crashes and load issues,Product Support,Technical & IT Support,0.9069,0.8663,0.6
+in_domain,T07221,Timeout Issues with the Project Dashboard  Customer Support has received reports,Technical & IT Support,Technical & IT Support,0.985,0.9401,1.0
+in_domain,T07508,Connectivity Problems with Video Conference System StreamCam  A financial organi,Customer Service,Technical & IT Support,0.9663,0.821,0.2
+in_domain,T08397,Problem with Data Access  A healthcare provider encountered data access problems,Product Support,Technical & IT Support,0.8586,0.8499,0.4
+in_domain,T09076,"Customer Support, I am reaching out to inquire about the digital strategies empl",Customer Service,Sales and Pre-Sales,0.9967,0.9685,0.0
+in_domain,T09243,The company's digital marketing campaign failed to deliver across various platfo,Technical & IT Support,Technical & IT Support,0.9714,0.8752,1.0
+in_domain,T09263,Seeking guidance on how to securely handle medical data using Microsoft Translat,Billing and Payments,Product Support,0.993,0.8789,0.2
+in_domain,T09785,Ensuring the Safety of Medical Information  Is it possible to get advice on secu,Technical & IT Support,Technical & IT Support,0.9493,0.926,0.6
+in_domain,T10480,"Report on Service Interruption  A service outage happened, impacting several app",Service Outages and Maintenance,Service Outages and Maintenance,0.9538,0.8018,0.4
+in_domain,T10624,Report on SSD Malfunction  A critical failure has been observed with the Crucial,Technical & IT Support,Technical & IT Support,0.965,0.8306,1.0
+in_domain,T10768,Concern Regarding Data Analytics Software Efficiency  The company's data analyti,Technical & IT Support,Technical & IT Support,0.9693,0.8256,1.0
+in_domain,T11743,Enhancement of Investment Optimization Procedures  Facing disruptions in investm,Technical & IT Support,Technical & IT Support,0.928,0.739,1.0
+in_domain,T12192,"Need for Support  Customer Support, We are encountering performance problems wit",Technical & IT Support,Technical & IT Support,0.9699,0.8013,1.0
+in_domain,T12786,Recurring Timeouts in Project Dashboard  Facing frequent timeouts on the project,Technical & IT Support,Technical & IT Support,0.9444,0.8892,1.0
+in_domain,T12805,"Report Unauthorized Access Incident  Customer Support, An unauthorized access in",Technical & IT Support,Technical & IT Support,0.9245,0.8932,0.4
+in_domain,T13017,Concerning Performance  Experienced performance problems with the project manage,Customer Service,Technical & IT Support,0.977,0.8616,0.4
+in_domain,T13300,Could you provide details on digital strategies that enhance brand growth? Thank,Service Outages and Maintenance,Customer Service,0.9957,0.9726,0.4
+in_domain,T13393,Concerns Regarding Security of Medical Information  Facing difficulties in secur,Product Support,Technical & IT Support,0.9522,0.9263,0.2
+in_domain,T13651,Issues with Video Lag and Audio in Virtual Meetings  The financial analytics tea,Technical & IT Support,Technical & IT Support,0.9822,0.8829,0.8
+in_domain,T14703,System Downtime Impacting Data Analysis Utilities  A system outage has affected ,Technical & IT Support,Service Outages and Maintenance,0.9633,0.8338,0.0
+in_domain,T15090,"Concerns About Hospital Security Systems  Suspected data breach, currently exami",Technical & IT Support,Technical & IT Support,0.9942,0.9031,0.8
+in_domain,T15613,"Improve Integration Capabilities  Customer Support, looking to enhance integrati",Product Support,Product Support,0.8686,0.8208,0.6
+in_domain,T15642,Reported Incident of Medical Data Breach  A medical data breach has been detecte,Technical & IT Support,Technical & IT Support,0.9608,0.8924,0.6
+in_domain,T15831,Problem with Data Breach in Hospital System  There was a data breach in the hosp,Technical & IT Support,Technical & IT Support,0.925,0.8951,0.8
+in_domain,T15989,"Dear Customer Support, I would like to draw your attention to an issue with the ",Billing and Payments,Billing and Payments,0.9713,0.8988,1.0
+in_domain,T16117,"Customer Support, seeking assistance in optimizing the integration of digital ma",Technical & IT Support,Product Support,0.99,0.8931,0.0
+in_domain,T16244,Strategies for Brand Expansion via Digital Methods  Inquiring about digital stra,Product Support,Customer Service,0.9353,0.9247,0.2
+in_domain,T16405,Enquiry on Investment Optimization Services and Data Analytics  Customer Support,Returns and Exchanges,Sales and Pre-Sales,0.9783,0.9253,0.0
+in_domain,T16521,"Customer Support, I am reaching out to request enhancements to the integration f",Product Support,Product Support,0.9921,0.9049,1.0
+in_domain,T16627,"Dear customer support, could you offer insights into digital strategies for bran",Technical & IT Support,Sales and Pre-Sales,0.9983,0.9433,0.0
+in_domain,T17784,"Support for Redis 6.2 SaaS Integration  Hello, I hope this message finds you wel",Technical & IT Support,Product Support,0.9553,0.9312,0.0
+in_domain,T17818,"Dear customer support, we are addressing your inquiry regarding enhancements to ",Product Support,Sales and Pre-Sales,0.9811,0.9345,0.0
+in_domain,T18382,Misleading Investment Data Analytics Reports  Facing inaccuracies in investment ,Customer Service,Product Support,0.8759,0.8454,0.6
+in_domain,T18530,"Enhancing Security for Medical Data in Blackboard Learn  Customer Support, pleas",Customer Service,Technical & IT Support,0.7822,0.7689,0.4
+in_domain,T19099,Exploring digital strategies to enhance brand growth. Could you provide more inf,Billing and Payments,Customer Service,0.9557,0.9397,0.0
+in_domain,T19148,Guidance on Integrating ClickUp with SAP ERP Systems for Enhanced Project Manage,Technical & IT Support,Product Support,0.9849,0.8031,0.0
+in_domain,T19248,Assistance Required for Investment Guidance  I am reaching out for support in un,Technical & IT Support,Customer Service,0.9532,0.9147,0.2
+in_domain,T19809,Issues with Connecting HyperX Cloud II Wireless Headset  I am having connectivit,Returns and Exchanges,Product Support,0.9962,0.8826,0.0
+in_domain,T19963,"Dear Customer Support, I am inquiring about the data analytics services that can",Billing and Payments,Sales and Pre-Sales,0.9607,0.9566,0.0
+in_domain,T20210,Assistance with Marketing Support  Marketing digital initiatives have been hinde,Human Resources,Technical & IT Support,0.7277,0.7145,0.6
+in_domain,T20505,Problem with Digital Marketing Tools Invoicing  observed unforeseen charges in t,Billing and Payments,Billing and Payments,0.8566,0.8211,1.0
+in_domain,T20562,"Query on Digital Strategies  Dear Customer Support, I am inquiring about the dig",Billing and Payments,Customer Service,0.9013,0.8951,0.0
+in_domain,T20631,Problems Observed with Webex Meetings  Facing connectivity challenges with Cisco,Technical & IT Support,Technical & IT Support,0.9818,0.8368,1.0
+in_domain,T21515,Identified Inconsistencies in Returns Data  Encountered issues with inconsistent,Returns and Exchanges,Product Support,0.9677,0.9301,0.2
+in_domain,T21676,Advice Required  Is it possible to get guidance on securing medical data in Lara,Product Support,Product Support,0.9872,0.8857,0.4
+in_domain,T21755,"Customer support, a marketing agency has encountered a sudden drop in website tr",Technical & IT Support,Product Support,0.9069,0.8512,0.2
+in_domain,T21905,Problem with Project Management Tool Access  We are encountering sporadic issues,Returns and Exchanges,Technical & IT Support,0.9229,0.8745,0.4
+in_domain,T21915,Incident Report: Network Security Breach  There was an unauthorized access incid,Technical & IT Support,Technical & IT Support,0.9684,0.8982,0.8
+in_domain,T22287,"customer support, investigating unexpected billing discrepancies across various ",Billing and Payments,Billing and Payments,0.9879,0.8674,1.0
+in_domain,T22359,Problem with Investment Optimization  Noticing inaccuracies in the investment op,Customer Service,Product Support,0.9283,0.8454,0.0
+in_domain,T22886,Trouble with Engagement Metrics  A marketing firm is facing irregular engagement,Product Support,Product Support,0.9649,0.894,0.2
+in_domain,T23238,"Customer support, a data breach has been detected in the hospital's systems, pos",Technical & IT Support,Technical & IT Support,0.9868,0.9213,0.6
+in_domain,T23338,Support Needed for Unauthorized Access Attempt  An unauthorized access attempt h,Returns and Exchanges,Technical & IT Support,0.9711,0.9285,0.4
+in_domain,T23340,Exploring Integration of AutoCAD 2022 SaaS  Seeking guidance on integrating Auto,Customer Service,Product Support,0.991,0.8853,0.0
+in_domain,T23557,Support Concerns Regarding Billing  Noted the presence of unanticipated billing ,Billing and Payments,Billing and Payments,0.819,0.7965,1.0
+in_domain,T23782,Problem with Smart Devices  The Smart-Hörgerät and Smart-Luftreiniger have stopp,Customer Service,Technical & IT Support,0.6597,0.6396,0.4
+in_domain,T24325,"Concern about Project Timeline Feature  Hello Customer Support, I am experiencin",Product Support,Product Support,0.9934,0.6539,0.6
+in_domain,T24885,Need Assistance with GIMP  Could offer advice on optimizing GIMP for data analyt,Technical & IT Support,Product Support,0.965,0.685,0.0
+in_domain,T24920,Review and Update Compatibility Settings for Enhanced Integration  Please update,Technical & IT Support,Product Support,0.9019,0.8576,0.2
+in_domain,T25096,Facing integration challenges with SaaS platform,Sales and Pre-Sales,Product Support,0.9942,0.9061,0.0
+in_domain,T25981,Expansion of Brand Influence  Improve digital marketing tactics for boosting bra,Sales and Pre-Sales,Sales and Pre-Sales,0.8707,0.8509,0.0
+in_domain,T26086,Marketing Growth Support Needed  Our marketing agency has encountered difficulti,Customer Service,Customer Service,0.9803,0.8391,0.2
+in_domain,T26281,Help with Data Breach Problem  went through a data breach because of inadequate ,Product Support,Technical & IT Support,0.9209,0.7848,0.4
+in_domain,T26413,Microsoft Teams Integration Support  Is it possible to receive comprehensive gui,Customer Service,Product Support,0.9602,0.9378,0.0
+in_domain,T26638,Recently encountered an unexpected billing error on the latest invoice. This mig,Billing and Payments,Billing and Payments,0.993,0.9332,1.0
+in_domain,T26850,"Enhance Data Analytics Tool Optimization  Customer Support, requesting an update",Technical & IT Support,Product Support,0.9512,0.91,0.2
+in_domain,T27023,Assistance Required for Medical Data Storage System  In need help with writing a,Customer Service,Technical & IT Support,0.789,0.7465,0.2
+in_domain,T27423,Detected Unauthorized Access Attempt in Medical Data System  An unauthorized acc,Product Support,Technical & IT Support,0.9545,0.9114,0.8
+in_domain,T27924,A marketing agency is facing delays in campaign metrics reporting. This could be,Product Support,Product Support,0.9921,0.9076,0.6
+in_domain,T28187,"Concern with Investment Optimization Model  Dear Customer Support,\n\nI am writi",Product Support,Technical & IT Support,0.9772,0.9045,0.0
+in_domain,T28346,Information on Integration with Zapier for Project Management  I am inquiring ab,Technical & IT Support,Product Support,0.9849,0.9064,0.0
+in_domain,T28372,"Hello Customer Support, I hope this message finds you well. I am writing to seek",Product Support,Technical & IT Support,0.8584,0.8058,0.0
+in_domain,T28447,"Dear customer support, I am interested in optimizing campaigns to enhance our br",Technical & IT Support,Product Support,0.9998,0.8752,0.2
+in_domain,T28508,Secure Access to Medical Data  Is it possible to supply details on securing acce,Customer Service,Technical & IT Support,0.9891,0.8586,0.2
+off_topic,OFF01,How do I make a good carbonara? I always end up with scrambled eggs.,,Customer Service,0.2707,0.2175,0.2
+off_topic,OFF02,"I can't believe how rude the bus driver was this morning, absolutely disgusting ",,Customer Service,0.2613,0.2545,0.0
+off_topic,OFF03,asdkjh qwpoe zxmnb lkjqwe poiuy,,Customer Service,0.1667,0.1551,0.0
+off_topic,OFF04,"Hi, my Tesla Cybertruck's autopilot keeps steering into the kerb after the firmw",,Product Support,0.3355,0.3167,0.0
+off_topic,OFF05,help,,Customer Service,0.4522,0.3083,0.0
+off_topic,OFF06,What is the capital of Australia and how many people live there?,,Customer Service,0.1364,0.1264,0.0
+off_topic,OFF07,Can you recommend a good workout routine for building leg muscle in six weeks?,,Customer Service,0.2342,0.2266,0.4
+off_topic,OFF08,My cat has stopped eating and keeps hiding under the bed. Should I take her to t,,Customer Service,0.2071,0.2005,0.2
+off_topic,OFF09,"I would like to book a table for four at your restaurant this Saturday at 7pm, w",,Customer Service,0.288,0.2805,0.0
+off_topic,OFF10,Write me a poem about the ocean in the style of Shakespeare.,,Customer Service,0.2083,0.1722,0.8

@@ -1,4 +1,4 @@
-"""The shared state: one notebook that every step of the agent reads from and writes to."""
+﻿"""The shared state: one notebook that every step of the agent reads from and writes to."""
 from typing import TypedDict
 
 
@@ -20,6 +20,8 @@ class TicketState(TypedDict, total=False):
     used_ticket_ids: list[str]     # which similar tickets the reply was based on
     analysis: Analysis             # summary, root cause, suggested fix, severity
     confidence: float              # how sure the agent is (0-1)
+    top_score: float               # best similarity score from the search
+    agreement: float               # share of similar tickets with the classified category
     attempts: int                  # how many times we tried to draft a reply
     search_query: str              # what we searched for (can be rewritten on retry)
     check_result: str              # outcome of the self-check step
